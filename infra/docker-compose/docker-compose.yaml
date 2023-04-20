@@ -1,0 +1,147 @@
+version: '3.8'
+name: "node_util"
+services:
+  broker:
+    container_name: broker
+    image: rabbitmq:3.12-rc-management
+    command: rabbitmq-server
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    networks:
+      - node-net
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - 9100:9100
+    networks:
+      - node-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - 9090:9090
+      - 9000:9000
+    networks:
+      - node-net
+
+  db:
+    extends:
+      file: ./../../crawler/docker-compose.yaml
+      service: db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - node-net
+
+  dbadmin:
+    extends:
+      file: ./../../crawler/docker-compose.yaml
+      service: dbadmin
+    networks:
+      - node-net
+    depends_on:
+      - db
+
+  crawler:
+    extends:
+      file: ./../../crawler/docker-compose.yaml
+      service: crawler
+    networks:
+      - node-net
+    depends_on:
+      - db
+      - broker
+    command: 
+      crawl
+      --metrics
+      --discport=4010
+      --db_source="postgresql://${NODE_UTIL_DB_USERNAME}:${NODE_UTIL_DB_PASSWORD}@db/node_util?sslmode=disable"
+      --db_migration_url="file://./migration/"
+      --enable_broker
+      --broker_endpoint="broker:5672"
+      --broker_user="crawler"
+      --broker_password=$NODE_UTIL_BROKER_CRAWLER_PASSWORD
+    entrypoint:
+      [
+        "/app/wait-for-it.sh",
+        "broker:15672",
+        --timeout=10 ,
+        --strict,
+        "--",
+        "/app/docker-entry-point.sh"
+      ]
+
+
+  scanner_cache:
+    extends:
+      file: ./../../scanner/docker-compose.yaml
+      service: cache
+    networks:
+      - node-net
+  scanner:
+    extends:
+      file: ./../../scanner/docker-compose.yaml
+      service: scanner
+    networks:
+      - node-net
+    depends_on:
+      - db
+      - broker
+      - scanner_cache
+    command: 
+      EventScan
+      --metrics
+      --db_enabled
+      --db_source="postgresql://${NODE_UTIL_DB_USERNAME}:${NODE_UTIL_DB_PASSWORD}@db/node_util?sslmode=disable"
+      --db_migration_url="file://./migration/"
+      --cache_enabled
+      --cache_endpoint=cache:6379
+      --cache_password=$NODE_UTIL_SCANNER_REDIS_PASSWORD
+      --broker_enabled
+      --broker_endpoint="broker:5672"
+      --broker_user="scanner"
+      --broker_password=$NODE_UTIL_BROKER_SCANNER_PASSWORD
+      --burst=64
+      --interval_in_ms=1
+      --verbose
+    entrypoint:
+      [
+        "/app/wait-for-it.sh",
+        "broker:15672",
+        --timeout=10 ,
+        --strict,
+        "--",
+        "/app/docker-entry-point.sh"
+      ]
+
+networks:
+  node-net:
+    driver: bridge
+
+volumes:
+  prometheus_data: {}
+  db_data: {}

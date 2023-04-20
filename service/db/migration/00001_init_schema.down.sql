@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS nodes;
+DROP TABLE IF EXISTS enr_records;
+DROP TABLE IF EXISTS rlp_records;
+DROP TABLE IF EXISTS scan_records;

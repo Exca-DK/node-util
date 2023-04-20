@@ -1,0 +1,31 @@
+version: '3.8'
+name: "node_util_crawler"
+services:
+  db:
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - crawl-net
+  dbadmin:
+    networks:
+      - crawl-net
+    depends_on:
+      - db
+  crawler:
+    networks:
+      - crawl-net
+    depends_on:
+      - db
+    command:
+      crawl
+      --metrics
+      --discport=4010
+      --db_source="postgresql://${NODE_UTIL_DB_USERNAME}:${NODE_UTIL_DB_PASSWORD}@db/node_util?sslmode=disable"
+      --db_migration_url="file://./migration/"
+
+networks:
+  crawl-net:
+    driver: bridge
+
+volumes:
+  db_data: {}

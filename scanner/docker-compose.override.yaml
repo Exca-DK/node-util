@@ -1,0 +1,26 @@
+version: '3.8'
+name: "node_util_crawler"
+services:
+  cache:
+    networks:
+      - scan-net
+  scanner:
+    networks:
+      - scan-net
+    depends_on:
+      - cache
+    command:
+      --db_source="postgresql://${NODE_UTIL_DB_USERNAME}:${NODE_UTIL_DB_PASSWORD}@db/node_util?sslmode=disable"
+      --db_migration_url="file://./migration/"
+      --cache_endpoint=cache:6379
+      --cache_password=$NODE_UTIL_SCANNER_REDIS_PASSWORD
+      --broker_endpoint=$NODE_UTIL_BROKER_ENDPOINT
+      --broker_user="scanner"
+      --broker_password=$NODE_UTIL_BROKER_SCANNER_PASSWORD
+
+networks:
+  scan-net:
+    driver: bridge
+
+volumes:
+  db_data: {}

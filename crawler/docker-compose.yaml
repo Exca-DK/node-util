@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  db:
+    container_name: db
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: $NODE_UTIL_DB_USERNAME
+      POSTGRES_PASSWORD: $NODE_UTIL_DB_PASSWORD
+      POSTGRES_DB: node_util
+    ports:
+      - "127.0.0.1:5432:5432"
+      
+  dbadmin:
+    container_name: pgadmin4_container
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - "127.0.0.1:5058:80"
+
+  crawler:
+    container_name: crawler
+    build:
+      context: ..
+      dockerfile: ./crawler/Docker/Dockerfile
+    ports:
+      - 4010:4010/udp
+
+
